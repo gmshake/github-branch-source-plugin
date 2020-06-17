@@ -34,9 +34,16 @@ import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.model.Item;
 import hudson.model.Queue;
+import hudson.model.Run;
+import hudson.model.TaskListener;
+import hudson.plugins.git.GitException;
 import hudson.plugins.git.GitSCM;
+import hudson.plugins.git.Revision;
 import hudson.plugins.git.browser.GithubWeb;
+import hudson.plugins.git.extensions.GitSCMChangelogExtension;
 import hudson.security.ACL;
+
+import java.io.IOException;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.Random;
@@ -51,6 +58,8 @@ import jenkins.scm.api.mixin.TagSCMHead;
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.transport.RefSpec;
+import org.jenkinsci.plugins.gitclient.ChangelogCommand;
+import org.jenkinsci.plugins.gitclient.GitClient;
 import org.jenkinsci.plugins.github.config.GitHubServerConfig;
 
 /**
@@ -339,12 +348,31 @@ public class GitHubSCMBuilder extends GitSCMBuilder<GitHubSCMBuilder> {
                 if (r instanceof PullRequestSCMRevision) {
                     PullRequestSCMRevision rev = (PullRequestSCMRevision) r;
                     withRevision(new AbstractGitSCMSource.SCMRevisionImpl(head, rev.getPullHash()));
+                    withExtension(new GitSCMPullRequestChangelogExtension(rev.getBaseHash()));
                 }
             }
             return super.build();
         } finally {
             withHead(h);
             withRevision(r);
+        }
+    }
+
+    /**
+     * Compute changelog of pull request.
+     */
+    static final class GitSCMPullRequestChangelogExtension extends GitSCMChangelogExtension {
+        final String targetHash;
+
+        public GitSCMPullRequestChangelogExtension(String targetHash) {
+            this.targetHash = targetHash;
+        }
+
+        public boolean decorateChangelogCommand(GitSCM gitSCM, Run<?, ?> run, GitClient git, TaskListener taskListener, ChangelogCommand cmd, Revision revToBuild) throws IOException, InterruptedException, GitException {
+            taskListener.getLogger().println("Using 'Changelog for PullRequest' strategy.");
+            cmd.includes(revToBuild.getSha1());
+            cmd.excludes(targetHash);
+            return true;
         }
     }
 }
